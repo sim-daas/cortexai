@@ -1,3 +1,0 @@
-/root/cortexai/c/build/CMakeFiles/rebuild_cache.dir
-/root/cortexai/c/build/CMakeFiles/edit_cache.dir
-/root/cortexai/c/build/CMakeFiles/my-deepstream-app.dir

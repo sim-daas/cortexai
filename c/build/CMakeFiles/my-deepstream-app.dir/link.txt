@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/my-deepstream-app.dir/my_deepstream_app.cpp.o -o my-deepstream-app  -Wl,-rpath,/opt/nvidia/deepstream/deepstream/lib /opt/nvidia/deepstream/deepstream/lib/libnvds_service_maker.so 
