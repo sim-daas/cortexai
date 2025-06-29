@@ -34,10 +34,6 @@ class PipelineRunner(Node):
         # Register signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
-        # Add a timer to check for shutdown and force exit if needed
-        self.create_timer(1.0, self.shutdown_check)
-        
-        self.shutdown_initiated = False
     
     def command_callback(self, msg):
         """Handle incoming pipeline commands"""
@@ -74,10 +70,13 @@ class PipelineRunner(Node):
             return
         
         try:
-            # Start the pipeline as a separate process
+            # Start the pipeline as a separate process.
+            # By not redirecting stdout/stderr to a PIPE, we avoid the child process
+            # hanging when the pipe buffer fills up. The child's output will go to
+            # the same console as this runner script.
             process = subprocess.Popen([
                 sys.executable, str(pipeline_script)
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            ])
             
             self.running_pipelines[pipeline_name] = process
             self.get_logger().info(f'Started pipeline "{pipeline_name}" with PID: {process.pid}')
@@ -127,19 +126,9 @@ class PipelineRunner(Node):
     
     def signal_handler(self, signum, frame):
         """Handle shutdown signals"""
-        if not self.shutdown_initiated:
-            self.shutdown_initiated = True
-            self.get_logger().info(f'Received signal {signum}, shutting down...')
-            self.cleanup_all_pipelines()
-            rclpy.shutdown()
-            # Force exit after cleanup to avoid hang
-            os._exit(0)
-    
-    def shutdown_check(self):
-        """Force exit if shutdown was initiated but process is still alive"""
-        if self.shutdown_initiated:
-            self.get_logger().info('Force exiting pipeline_runner...')
-            os._exit(0)
+        self.get_logger().info(f'Received signal {signum}, shutting down...')
+        self.cleanup_all_pipelines()
+        rclpy.shutdown()
 
 
 def main(args=None):
@@ -150,12 +139,11 @@ def main(args=None):
     try:
         rclpy.spin(pipeline_runner)
     except KeyboardInterrupt:
-        pipeline_runner.signal_handler(signal.SIGINT, None)
+        pass
     finally:
         pipeline_runner.cleanup_all_pipelines()
         pipeline_runner.destroy_node()
         rclpy.shutdown()
-        os._exit(0)
 
 
 if __name__ == '__main__':

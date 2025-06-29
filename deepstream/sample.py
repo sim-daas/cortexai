@@ -40,5 +40,4 @@ if __name__ == '__main__':
     pipeline.add("nvosdbin", "osd").add("nveglglessink", "sink")
     pipeline.link(("src", "mux"), ("", "sink_%u")).link("mux", "infer", "osd", "sink")
     pipeline.attach("infer", Probe("counter", ObjectCounterMarker()))
-    pipeline.start_rtsp_server(rtsp_port=8554, udp_port=5400)
     pipeline.start().wait()
