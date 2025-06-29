@@ -34,12 +34,21 @@ class PipelineRunner(Node):
         # Register signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
+        
+        # Periodically check for finished child processes
+        self.process_check_timer = self.create_timer(10.0, self.check_pipeline_processes)
     
     def command_callback(self, msg):
         """Handle incoming pipeline commands"""
         command = msg.data.strip()
         self.get_logger().info(f'Received command: {command}')
-        
+
+        if command == "kill":
+            self.get_logger().info("Kill command received. Exiting now.")
+            self.cleanup_all_pipelines()
+            self.destroy_node()
+            os._exit(0)
+
         try:
             if ':' not in command:
                 self.get_logger().error(f'Invalid command format: {command}. Expected format: start:<pipeline_name> or stop:<pipeline_name>')
@@ -124,6 +133,16 @@ class PipelineRunner(Node):
         for pipeline_name in pipeline_names:
             self.stop_pipeline(pipeline_name)
     
+    def check_pipeline_processes(self):
+        """Remove pipelines from tracking if their process has exited."""
+        to_remove = []
+        for name, proc in self.running_pipelines.items():
+            if proc.poll() is not None:
+                self.get_logger().info(f'Pipeline "{name}" has finished on its own (exit code {proc.returncode}). Removing from running list.')
+                to_remove.append(name)
+        for name in to_remove:
+            del self.running_pipelines[name]
+    
     def signal_handler(self, signum, frame):
         """Handle shutdown signals"""
         self.get_logger().info(f'Received signal {signum}, shutting down...')
@@ -133,18 +152,8 @@ class PipelineRunner(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    
     pipeline_runner = PipelineRunner()
-    
-    try:
-        rclpy.spin(pipeline_runner)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        pipeline_runner.cleanup_all_pipelines()
-        pipeline_runner.destroy_node()
-        rclpy.shutdown()
-
+    rclpy.spin(pipeline_runner)
 
 if __name__ == '__main__':
     main()
