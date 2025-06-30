@@ -29,7 +29,7 @@ class ObjectCounterMarker(BatchMetadataOperator):
             display_meta.add_text(label)
             frame_meta.append(display_meta)
 
-CONFIG_FILE_PATH = "/root/DeepStream-Yolo/config_infer_primary_yolo11.txt"
+CONFIG_FILE_PATH = "/root/DeepStream-Yolo-Seg/config_infer_primary_yoloV8_seg.txt"
 uri = "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_qHD.mp4"
 
 if __name__ == '__main__':
