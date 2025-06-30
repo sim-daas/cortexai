@@ -68,20 +68,24 @@ RUN cd ~ && python3 -m venv ds-venv && /bin/bash -c "source ds-venv/bin/activate
     git clone https://github.com/ultralytics/ultralytics.git && \
     cd ultralytics && \
     pip3 install . && \
-    pip3 install onnx onnxslim onnxruntime
+    pip3 install onnx onnxslim onnxruntime torch
 
+RUN update-alternatives --set cuda /usr/local/cuda-12.2
+
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+        echo "export CUDA_VER=12.2" >> /root/.bashrc && /bin/bash -c "source /root/.bashrc"
+    
 RUN cd ~ && \
     git clone https://github.com/marcoslucianops/DeepStream-Yolo && \
     cp DeepStream-Yolo/utils/export_yolo11.py ~/ultralytics/. && \
     cd ~/ultralytics && \
     wget https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11s.pt && \
-    python3 export_yolo11.py -w yolo11s.pt --dynamic && \
-    cp yolo11s.onnx ~/DeepStream-yolo/. 
+    apt install libeigen3-dev libjson-glib-dev libgstrtspserver-1.0-dev -y && \
+    sh /opt/nvidia/deepstream/deepstream/user_additional_install.sh
+  #  python3 export_yolo11.py -w yolo11s.pt --dynamic && \
+  #  cp yolo11s.onnx ~/DeepStream-yolo/. 
+    
 
-RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
-    echo "export CUDA_VER=12.2" >> /root/.bashrc
+#RUN /bin/bash -c "source ~/.bashrc" && cd ~/DeepStream-Yolo && \
+  #  make -C nvdsinfer_custom_impl_Yolo clean && make -C nvdsinfer_custom_impl_Yolo
 
-RUN source ~/.bashrc && cd ~/DeepStream-Yolo && \
-    make -C nvdsinfer_custom_impl_Yolo clean && make -C nvdsinfer_custom_impl_Yolo
-
-RUN update-alternatives --set cuda /usr/local/cuda-12.2
