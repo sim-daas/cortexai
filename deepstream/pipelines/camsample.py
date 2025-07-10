@@ -30,7 +30,6 @@ class ObjectCounterMarker(BatchMetadataOperator):
             frame_meta.append(display_meta)
 
 CONFIG_FILE_PATH = "/root/DeepStream-Yolo/config_infer_primary_yolo11.txt"
-uri = "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_qHD.mp4"
 
 if __name__ == '__main__':
     pipeline = Pipeline("sample-pipeline")
@@ -43,6 +42,5 @@ if __name__ == '__main__':
     pipeline.add("nvinferbin", "infer", {"config-file-path": CONFIG_FILE_PATH})
     pipeline.add("nvosdbin", "osd").add("nveglglessink", "sink", {"sync": False})
     pipeline.link("src", "src_caps","convert", "nvconvert", "nvconvert_caps", "mux", "infer", "osd", "sink")
-  #  pipeline.link(("src", "mux"), ("", "sink_%u")).link("mux", "infer", "osd", "sink")
     pipeline.attach("infer", Probe("counter", ObjectCounterMarker()))
     pipeline.start().wait()
