@@ -1,46 +1,75 @@
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
 from pyservicemaker import Pipeline, BatchMetadataOperator, Probe, osd
+import json
 import time
 
-class ObjectCounterMarker(BatchMetadataOperator):
+class DetectionPublisher(BatchMetadataOperator):
+    def __init__(self, ros_node):
+        super().__init__()
+        self.ros_node = ros_node
+        self.publisher = ros_node.create_publisher(String, '/det', 10)
+        self.fps_start_time = time.time()
+        self.frame_count = 0
+
     def handle_metadata(self, batch_meta):
+        dets = []
         for frame_meta in batch_meta.frame_items:
-            vehcle_count = 0
-            person_count = 0
+            # FPS calculation
+            self.frame_count += 1
+            current_time = time.time()
+            elapsed_time = current_time - self.fps_start_time
+            if elapsed_time >= 1.0:
+                fps = self.frame_count / elapsed_time
+                print(f"Average FPS: {fps:.2f}")
+                self.frame_count = 0
+                self.fps_start_time = current_time
+
             for object_meta in frame_meta.object_items:
-                class_id = object_meta.class_id
-                if class_id == 0:
-                    vehcle_count += 1
-                elif class_id == 2:
-                    person_count += 1
-            print(f"Object Counter: Pad Idx={frame_meta.pad_index},"
-                f"Frame Number={frame_meta.frame_number},"
-                f"Vehicle Count={vehcle_count}, Person Count={person_count}")
-            text = f"Person={person_count},Vehicle={vehcle_count}"
-            display_meta = batch_meta.acquire_display_meta()
-            label = osd.Text()
-            label.display_text = text.encode('ascii')
-            label.x_offset = 10
-            label.y_offset = 12
-            label.font.name = osd.FontFamily.Serif
-            label.font.size = 12
-            label.font.color = osd.Color(1.0, 1.0, 1.0, 1.0)
-            label.set_bg_color = True
-            label.bg_color = osd.Color(0.0, 0.0, 0.0, 1.0)
-            display_meta.add_text(label)
-            frame_meta.append(display_meta)
+                bbox = getattr(object_meta, "rect_params", None)
+                if bbox is not None:
+                    det = {
+                        "class_id": int(getattr(object_meta, "class_id", -1)),
+                        "left": float(getattr(bbox, "left", 0.0)),
+                        "top": float(getattr(bbox, "top", 0.0)),
+                        "width": float(getattr(bbox, "width", 0.0)),
+                        "height": float(getattr(bbox, "height", 0.0)),
+                        "confidence": float(getattr(object_meta, "confidence", 0.0))
+                    }
+                    dets.append(det)
+        msg = String()
+        msg.data = json.dumps(dets)
+        self.publisher.publish(msg)
 
 CONFIG_FILE_PATH = "/root/DeepStream-Yolo/config_infer_primary_yolo11.txt"
 
+class DeepStreamNode(Node):
+    def __init__(self):
+        super().__init__('deepstream_cam_detector')
+        self.pipeline = Pipeline("sample-pipeline")
+        self.pipeline.add("v4l2src", "src" , {"device": "/dev/video0"})
+        self.pipeline.add("capsfilter", "src_caps", {"caps": "video/x-raw, framerate=30/1"})
+        self.pipeline.add("videoconvert", "convert")
+        self.pipeline.add("nvvideoconvert", "nvconvert")
+        self.pipeline.add("capsfilter", "nvconvert_caps", {"caps": "video/x-raw(memory:NVMM)"})
+        self.pipeline.add("nvstreammux", "mux", {"batch-size": 1, "width": 1280, "height": 720})
+        self.pipeline.add("nvinferbin", "infer", {"config-file-path": CONFIG_FILE_PATH})
+        self.pipeline.add("nvosdbin", "osd").add("nveglglessink", "sink", {"sync": False})
+        self.pipeline.link("src", "src_caps","convert", "nvconvert", "nvconvert_caps", "mux", "infer", "osd", "sink")
+        self.pipeline.attach("infer", Probe("det_pub", DetectionPublisher(self)))
+        self.pipeline.start()
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = DeepStreamNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    node.pipeline.stop()
+    node.destroy_node()
+    rclpy.shutdown()
+
 if __name__ == '__main__':
-    pipeline = Pipeline("sample-pipeline")
-    pipeline.add("v4l2src", "src" , {"device": "/dev/video0"})
-    pipeline.add("capsfilter", "src_caps", {"caps": "video/x-raw, framerate=30/1"})
-    pipeline.add("videoconvert", "convert")
-    pipeline.add("nvvideoconvert", "nvconvert")
-    pipeline.add("capsfilter", "nvconvert_caps", {"caps": "video/x-raw(memory:NVMM)"})
-    pipeline.add("nvstreammux", "mux", {"batch-size": 1, "width": 1280, "height": 720})
-    pipeline.add("nvinferbin", "infer", {"config-file-path": CONFIG_FILE_PATH})
-    pipeline.add("nvosdbin", "osd").add("nveglglessink", "sink", {"sync": False})
-    pipeline.link("src", "src_caps","convert", "nvconvert", "nvconvert_caps", "mux", "infer", "osd", "sink")
-    pipeline.attach("infer", Probe("counter", ObjectCounterMarker()))
-    pipeline.start().wait()
+    main()
